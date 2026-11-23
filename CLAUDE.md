@@ -7,4 +7,6 @@
   `recompute` for every saved session in brain so history stays comparable.
 - Token budget: look at `check_timeline.jpg` and `check_frames.jpg` (2 images), plus at most a few extra
   frames rendered with `frames`. Everything else is read from JSON.
+- The session result is `report.html` built by `bda report` from `notes.json` (schema in README) + data; never
+  hand-write HTML. After each session also rebuild `progress.html` with `bda progress`.
 - Commits: short message, no Claude attribution lines.

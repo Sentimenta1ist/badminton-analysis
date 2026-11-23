@@ -33,6 +33,31 @@ Outputs in `--out`:
 Other commands:
 - `python -m bda recompute --out DIR --date D [--history CSV]` — metrics again from saved keypoints (after editing `rallies.json` or changing a formula).
 - `python -m bda frames --out DIR --video V --times "84.5:label;220.8:label" [--camera side --offset S]` — render chosen moments.
+- `python -m bda report --session SESSION_DIR [--history metrics.csv]` — one self-contained `report.html` (images inlined as base64, inline SVG charts, light/dark, one column on phones).
+- `python -m bda progress --root BRAIN/badminton` — `progress.html` next to `sessions/`: trends of every metric, best frames per session, links to each `report.html`.
+
+## Session report: notes.json
+`report` reads `metrics.json`, `events.json`, `img/*.jpg` and history from the session folder, plus the text from
+`notes.json`. The previous session (folder `sessions/<earlier date>` next to this one) supplies last time's tasks and
+"before / after" frames.
+
+```json
+{
+ "date": "2026-11-29", "title": "…", "opponent": "…", "score": "21:17", "cameras": "back + side, 1080p60",
+ "duration": "31:20", "break_t": 1260, "lede": "…",
+ "main": ["**Bold** lead, then text", "…"],
+ "sections": [{"title": "1. Legs", "text": ["…"], "fix": "…",
+   "frames": [{"file": "img/p_low1.jpg", "t": 279.0, "verdict": "good|bad|warn",
+               "kind": "low", "kind_ru": "Низкая готовность", "short": "низкая готовность", "best": true,
+               "caption": "what is wrong / right", "fix": "how to fix (bad frames)", "wide": false}]}],
+ "tasks": [{"what": "…", "metric": "neutral_high_share", "now": 76.5, "target": 50, "op": "<="}],
+ "drills": ["…"], "limits": ["…"], "links": [{"title": "…", "url": "…"}]
+}
+```
+- `kind` only on the main example of each type (`tall`, `low`, `oh_good`, `oh_bad`, `lunge_good`, `lunge_bad`,
+  `side_lunge`, `side_trunk`): frames with the same `kind` in consecutive sessions are shown as "before / after".
+- `best: true` marks frames for `progress.html` (otherwise 2 good + 2 bad). `wide: true` for strips/montages.
+- Text supports `**bold**` and `` `code` ``.
 
 ## Method (short)
 - Pose: Ultralytics YOLO11 pose, 15 fps by default, the analysed player = tallest person, tracked for continuity.

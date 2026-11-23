@@ -3,6 +3,8 @@
   python -m bda run --back BACK.mp4 [--side SIDE.mp4] --out WORK --date 2026-11-29 [--history metrics.csv]
   python -m bda recompute --out WORK [--history metrics.csv]       # metrics again from saved keypoints
   python -m bda frames --out WORK --video BACK.mp4 --times "84.5:высоко;220.8:разворот" [--camera back]
+  python -m bda report --session SESSION_DIR [--history metrics.csv]   # notes.json + data -> report.html
+  python -m bda progress --root BRAIN/badminton                         # all sessions -> progress.html
 """
 import argparse, json, os, gzip
 import numpy as np
@@ -113,7 +115,17 @@ def main():
     fr.add_argument("--out", required=True); fr.add_argument("--video", required=True)
     fr.add_argument("--camera", default="back"); fr.add_argument("--times", required=True)
     fr.add_argument("--offset", type=float, default=0.0)
+    rp = sub.add_parser("report")
+    rp.add_argument("--session", required=True); rp.add_argument("--history")
+    pg = sub.add_parser("progress")
+    pg.add_argument("--root", required=True); pg.add_argument("--history")
     a = ap.parse_args()
+    if a.cmd in ("report", "progress"):
+        from . import report
+        root = os.path.expanduser(a.root) if a.cmd == "progress" else None
+        hist = os.path.expanduser(a.history) if a.history else None
+        print(report.build_report(os.path.expanduser(a.session), hist) if a.cmd == "report" else report.build_progress(root, hist))
+        return
     os.makedirs(a.out, exist_ok=True)
 
     if a.cmd == "run":
