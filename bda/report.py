@@ -399,6 +399,9 @@ def build_report(sd, history_path=None):
         out.append(f'<section><h2>Задания прошлого раза: {done} из {len(pt)}</h2><div class="tbl"><table><thead><tr>'
                    '<th>Что</th><th>Метрика</th><th>Было</th><th>Цель</th><th>Факт</th><th>Итог</th></tr></thead><tbody>' +
                    "".join(rows) + f'</tbody></table></div><p class="note">Задания из разбора {esc(earlier[-1])}.</p></section>')
+    elif earlier:
+        out.append(f'<section><h2>Задания прошлого раза</h2><div class="card"><p>У прошлой сессии ({esc(earlier[-1])}) заданий не было: '
+                   'она добавлена задним числом. Изменения к ней — на плитках выше и в блоке «Было / стало».</p></div></section>')
     else:
         out.append('<section><h2>Задания прошлого раза</h2><div class="card"><p>Это первая сессия: заданий прошлого раза нет, '
                    'цифры ниже стали точкой отсчёта.</p></div></section>')

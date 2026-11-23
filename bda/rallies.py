@@ -28,10 +28,15 @@ def activity(rows):
     return secs, act
 
 
-def detect(rows, thr=3.5, smooth=3, min_len=3.0, merge_gap=2.0, pad=0.5):
+def detect(rows, thr=None, smooth=3, min_len=3.0, merge_gap=2.0, pad=0.5):
+    """thr=None: 3.5 at 10 fps, scaled with the analysis fps (keypoint jitter adds foot travel per extra frame)."""
     secs, act = activity(rows)
     if len(secs) == 0:
         return []
+    if thr is None:
+        T = np.array([r["t"] for r in rows])
+        fps = (len(T) - 1) / max(T[-1] - T[0], 1e-6) if len(T) > 1 else 10.0
+        thr = 3.5 * max(fps, 10.0) / 10.0
     sm = np.convolve(act, np.ones(smooth) / smooth, "same")
     on = sm > thr
     segs, start = [], None
