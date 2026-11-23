@@ -13,14 +13,14 @@ def load_history(path):
         return list(csv.DictReader(fh))
 
 
-def append(path, date, session, metrics):
+def append(path, date, session, metrics, skip=()):
     new = not os.path.exists(path)
     with open(path, "a", newline="") as fh:
         w = csv.writer(fh)
         if new:
             w.writerow(["date", "session", "metric", "value", "version"])
         for k, v in metrics.items():
-            if v is None or k not in METRICS:
+            if v is None or k not in METRICS or k in skip:
                 continue
             w.writerow([date, session, k, round(float(v), 3), METRICS[k]["version"]])
 

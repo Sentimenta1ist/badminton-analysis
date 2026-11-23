@@ -57,6 +57,9 @@ Other commands:
 - `kind` only on the main example of each type (`tall`, `low`, `oh_good`, `oh_bad`, `lunge_good`, `lunge_bad`,
   `side_lunge`, `side_trunk`): frames with the same `kind` in consecutive sessions are shown as "before / after".
 - `best: true` marks frames for `progress.html` (otherwise 2 good + 2 bad). `wide: true` for strips/montages.
+- `skip_metrics`: metrics the camera angle makes meaningless (e.g. a corner camera: shoulder turn, stance width,
+  lunge lean, court position). They are hidden in the report; pass the same list to `compare.append(..., skip=...)`
+  so they never enter the history.
 - Text supports `**bold**` and `` `code` ``.
 
 ## Method (short)

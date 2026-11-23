@@ -7,7 +7,7 @@ import base64, html, io, json, os, re
 from .metrics_def import METRICS
 from .compare import load_history
 
-KEY = ["neutral_high_share", "neutral_narrow_share", "oh_turned_share", "oh_square_share", "oh_leftarm_up_share",
+KEY = ["neutral_high_share", "neutral_narrow_share", "oh_turned_share", "oh_square_share", "oh_leftarm_up_share", "oh_reach_median",
        "lunge_lean_share", "side_neutral_straight_share", "side_lunge_trunk_fwd_median"]
 SHORT = {
     "neutral_high_share": "времени между ударами стоишь высоко",
@@ -15,6 +15,7 @@ SHORT = {
     "oh_turned_share": "ударов сверху с разворотом",
     "oh_square_share": "ударов сверху грудью к сетке",
     "oh_leftarm_up_share": "ударов сверху с поднятой левой рукой",
+    "oh_reach_median": "высота точки удара над головой, длин корпуса",
     "lunge_lean_share": "выпадов с завалом корпуса >25°",
     "side_neutral_straight_share": "времени колени почти прямые (сбоку)",
     "side_lunge_trunk_fwd_median": "наклон корпуса вперёд в выпаде (сбоку)",
@@ -133,6 +134,8 @@ def num(v, k=None):
         return f"{v:.0f}%"
     if unit == "°":
         return f"{v:.0f}°"
+    if float(v).is_integer():
+        return f"{int(v)}"
     return f"{v:.2f}" if abs(v) < 10 else f"{v:.1f}"
 
 
@@ -219,22 +222,28 @@ def chart_rallies(per_rally, break_t=None, goal=None):
     return "".join(s)
 
 
-def chart_trend(points, k, goal=None):
-    """Small line chart for one metric over sessions. points: [(date, value)]."""
+def chart_trend(points, k, goal=None, dates=None):
+    """Small line chart for one metric over sessions. points: [(date, value)]; dates: shared x axis (all sessions)."""
     W, H, L, R, T, B = 300, 130, 34, 14, 14, 26
     pw, ph = W - L - R, H - T - B
     vals = [v for _, v in points] + ([goal] if goal is not None else [])
     unit = METRICS[k]["unit"]
-    lo, hi = (0.0, 100.0) if unit == "%" else (min(vals), max(vals))
-    if hi - lo < 1e-6:
-        lo, hi = lo - 1, hi + 1
+    if unit == "%":
+        lo, hi = 0.0, 100.0
+    else:
+        lo, hi = min(vals), max(vals)
+        pad = (hi - lo) * 0.25 or abs(hi) * 0.1 or 1.0
+        lo, hi = (max(0.0, lo - pad) if lo >= 0 else lo - pad), hi + pad
     y = lambda v: T + ph * (1 - (v - lo) / (hi - lo))
     n = len(points)
-    x = lambda i: L + (pw / 2 if n == 1 else pw * i / (n - 1))
+    dates = sorted(set(dates or [d for d, _ in points]))
+    m = len(dates)
+    x = lambda i: L + (pw / 2 if m == 1 else pw * dates.index(points[i][0]) / (m - 1))
     s = [f'<svg viewBox="0 0 {W} {H}" class="chart" role="img" aria-label="{esc(METRICS[k]["ru"])} по датам">']
     for v in ((0, 50, 100) if unit == "%" else (lo, hi)):
+        lab = f"{v:.0f}" if unit == "%" or hi - lo >= 5 else (f"{v:.1f}" if hi - lo >= 0.5 else f"{v:.2f}")
         s.append(f'<line x1="{L}" x2="{W-R}" y1="{y(v):.1f}" y2="{y(v):.1f}" class="grid"/>'
-                 f'<text x="{L-5}" y="{y(v)+4:.1f}" class="ax" text-anchor="end">{v:.0f}</text>')
+                 f'<text x="{L-5}" y="{y(v)+4:.1f}" class="ax" text-anchor="end">{lab}</text>')
     if goal is not None:
         s.append(f'<line x1="{L}" x2="{W-R}" y1="{y(goal):.1f}" y2="{y(goal):.1f}" class="goal"><title>цель {goal:g}</title></line>')
     if n > 1:
@@ -243,8 +252,10 @@ def chart_trend(points, k, goal=None):
         s.append(f'<circle class="pt" cx="{x(i):.1f}" cy="{y(v):.1f}" r="4"><title>{d}: {num(v, k)}</title></circle>')
         if i == n - 1 or n <= 6:
             s.append(f'<text x="{x(i):.1f}" y="{y(v)-8:.1f}" class="val" text-anchor="middle">{num(v, k)}</text>')
-        if n <= 6 or i in (0, n - 1):
-            s.append(f'<text x="{x(i):.1f}" y="{H-6}" class="ax" text-anchor="middle">{d[5:]}</text>')
+    for j, d in enumerate(dates):
+        if m <= 6 or j in (0, m - 1):
+            xx = L + (pw / 2 if m == 1 else pw * j / (m - 1))
+            s.append(f'<text x="{xx:.1f}" y="{H-6}" class="ax" text-anchor="middle">{d[5:]}</text>')
     s.append("</svg>")
     return "".join(s)
 
@@ -333,10 +344,10 @@ def frames_block(frames, sd):
     return '<div class="pair">' + "".join(figure(f, sd) for f in ordered) + "</div>"
 
 
-def oh_table(oh):
+def oh_table(oh, skip=()):
     rows = []
     for o in oh:
-        sh = ("good", "разворот") if o["turned"] else (("bad", "грудью к сетке") if o["square"] else ("same", "частично"))
+        sh = ("same", "—") if "oh_turned_share" in skip else (("good", "разворот") if o["turned"] else (("bad", "грудью к сетке") if o["square"] else ("same", "частично")))
         lu = o.get("left_up")
         la = ("same", "нет данных") if lu is None else (("good", "вверху") if lu > 0.2 else (("same", "у плеча") if lu > 0 else ("bad", "внизу")))
         rows.append(f'<tr><td>{tfmt(o["t"])}</td><td>{o["rally"]}</td><td><span class="pill {sh[0]}">{sh[1]}</span></td>'
@@ -345,11 +356,11 @@ def oh_table(oh):
             '<th>Высота кисти*</th><th>Прыжок</th></tr></thead><tbody>' + "".join(rows) + "</tbody></table></div>")
 
 
-def lunge_table(lg):
+def lunge_table(lg, skip=()):
     sides = {"left": "влево", "right": "вправо", "center": "центр"}
     rows = []
     for l in lg:
-        lean = f'<span class="pill {"bad" if l["lean"] > 25 else "good"}">{l["lean"]:.0f}°</span>'
+        lean = "—" if "lunge_lean_share" in skip else f'<span class="pill {"bad" if l["lean"] > 25 else "good"}">{l["lean"]:.0f}°</span>'
         rows.append(f'<tr><td>{tfmt(l["t"])}</td><td>{l["rally"]}</td><td>{sides.get(l["side"], l["side"])}</td>'
                     f'<td>{lean}</td><td>{100*l["depth"]:.0f}%</td><td>{l["stance"]:.2f}</td></tr>')
     return ('<div class="tbl"><table><thead><tr><th>Время</th><th>Розыгрыш</th><th>Сторона</th><th>Корпус вбок</th>'
@@ -381,7 +392,8 @@ def build_report(sd, history_path=None):
                (f'<p class="lede">{md(notes["lede"])}</p>' if notes.get("lede") else "") + "</header>")
 
     # tiles
-    tiles = [tile(k, metrics[k], prev_value(hm, k, date)) for k in KEY if metrics.get(k) is not None]
+    skip = set(notes.get("skip_metrics", []))
+    tiles = [tile(k, metrics[k], prev_value(hm, k, date)) for k in KEY if metrics.get(k) is not None and k not in skip]
     out.append('<section><h2>Главное в цифрах</h2><div class="tiles">' + "".join(tiles) + "</div>" +
                ("<div class=\"card\"><ol>" + "".join(f"<li>{md(x)}</li>" for x in notes["main"]) + "</ol></div>" if notes.get("main") else "") +
                "</section>")
@@ -421,13 +433,16 @@ def build_report(sd, history_path=None):
         up = sum(1 for v in lu if v is not None and v > 0.2); mid = sum(1 for v in lu if v is not None and 0 < v <= 0.2)
         down = len(oh) - up - mid
         ch.append(f'<div class="chartwrap"><h3>Удары сверху: {len(oh)}</h3>' +
-                  chart_stacked([("Плечи", [("разворот", turned, "s-good"), ("частично", len(oh) - turned - square, "s-mid"), ("грудью к сетке", square, "s-bad")]),
-                                 ("Левая рука", [("вверху", up, "s-good"), ("у плеча", mid, "s-mid"), ("внизу", down, "s-bad")])]) +
+                  chart_stacked(([] if "oh_turned_share" in skip else
+                                 [("Плечи", [("разворот", turned, "s-good"), ("частично", len(oh) - turned - square, "s-mid"), ("грудью к сетке", square, "s-bad")])]) +
+                                [("Левая рука", [("вверху", up, "s-good"), ("у плеча", mid, "s-mid"), ("внизу", down, "s-bad")])]) +
                   legend([("разворот / левая вверху", "good"), ("частично / у плеча", "court2"), ("грудью к сетке / левая внизу", "bad")]) + "</div>")
     lg = back.get("lunges", [])
     if lg:
         cnt = {s: [l for l in lg if l["side"] == s] for s in ("left", "center", "right")}
-        rows = [(lab, [("ровно", sum(l["lean"] <= 25 for l in cnt[s]), "s-good"), ("завал >25°", sum(l["lean"] > 25 for l in cnt[s]), "s-bad")])
+        lean_ok = "lunge_lean_share" not in skip
+        rows = [(lab, [("ровно", sum(l["lean"] <= 25 for l in cnt[s]), "s-good"), ("завал >25°", sum(l["lean"] > 25 for l in cnt[s]), "s-bad")]
+                 if lean_ok else [("выпадов", len(cnt[s]), "s-mid")])
                 for lab, s in (("Влево", "left"), ("Центр", "center"), ("Вправо", "right"))]
         mx = max(len(v) for v in cnt.values()) or 1
         # absolute bars (not 100%): scale each row by its count
@@ -444,14 +459,15 @@ def build_report(sd, history_path=None):
             s.append(f'<text x="{x+6:.1f}" y="{y0+18}" class="val">{sum(c for _, c, _ in parts)}</text>')
         s.append("</svg>")
         ch.append(f'<div class="chartwrap"><h3>Выпады: {len(lg)}, по сторонам</h3>' + "".join(s) +
-                  legend([("корпус ровно", "good"), ("завал корпуса >25°", "bad")]) +
+                  (legend([("корпус ровно", "good"), ("завал корпуса >25°", "bad")]) if lean_ok else "") +
                   '<p class="note">Сторона по положению стоп относительно центра корта (±0.3 м). Зависит от того, ровно ли стоит задняя камера.</p></div>')
     # trend (key metrics, all sessions)
+    all_dates = sorted({d for v in hm.values() for d, _, _ in v})
     sm = []
     for k in KEY:
         pts = [(d, v) for d, v, ver in hm.get(k, []) if ver == METRICS[k]["version"]]
         if pts:
-            sm.append(f'<div class="chartwrap"><h3>{esc(METRICS[k]["ru"])}</h3>{chart_trend(pts, k, goals.get(k))}</div>')
+            sm.append(f'<div class="chartwrap"><h3>{esc(METRICS[k]["ru"])}</h3>{chart_trend(pts, k, goals.get(k), all_dates)}</div>')
     if sm:
         ch.append('<h3>Тренд по всем сессиям</h3><div class="sm">' + "".join(sm) + "</div>"
                   '<p class="note">Зелёная пунктирная линия — цель из заданий этой сессии.</p>')
@@ -488,10 +504,10 @@ def build_report(sd, history_path=None):
     if oh or lg:
         t = ['<section><h2>Все удары сверху и выпады</h2>']
         if oh:
-            t.append(f'<details open><summary>Удары сверху ({len(oh)})</summary>{oh_table(oh)}'
+            t.append(f'<details open><summary>Удары сверху ({len(oh)})</summary>{oh_table(oh, skip)}'
                      '<p class="note">* Насколько правая кисть выше головы в верхней точке, в длинах корпуса.</p></details>')
         if lg:
-            t.append(f'<details><summary>Выпады ({len(lg)})</summary>{lunge_table(lg)}'
+            t.append(f'<details><summary>Выпады ({len(lg)})</summary>{lunge_table(lg, skip)}'
                      '<p class="note">** Расстояние между стопами в длинах корпуса.</p></details>')
         t.append("</section>")
         out.append("".join(t))
@@ -535,6 +551,7 @@ def build_progress(root, history_path=None):
     groups = [("Ноги между ударами", lambda k: k.startswith("neutral_") or k == "high_share_after_break"),
               ("Удар сверху", lambda k: k.startswith("oh_")), ("Выпады", lambda k: k.startswith("lunge_")),
               ("Сбоку", lambda k: k.startswith("side_")), ("Позиция и объём", lambda k: True)]
+    all_dates = sorted({d for v in hm.values() for d, _, _ in v})
     used = set()
     for title, match in groups:
         ks = [k for k in METRICS if k not in used and match(k) and hm.get(k)]
@@ -543,7 +560,7 @@ def build_progress(root, history_path=None):
         used.update(ks)
         charts = "".join(
             f'<div class="chartwrap"><h3>{esc(METRICS[k]["ru"])}</h3>'
-            f'{chart_trend([(d, v) for d, v, ver in hm[k] if ver == METRICS[k]["version"]], k, goals.get(k))}</div>' for k in ks)
+            f'{chart_trend([(d, v) for d, v, ver in hm[k] if ver == METRICS[k]["version"]], k, goals.get(k), all_dates)}</div>' for k in ks)
         out.append(f'<section><h2>{esc(title)}</h2><div class="sm">{charts}</div></section>')
     sess = []
     for d in reversed(ss):
