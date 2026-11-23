@@ -28,13 +28,19 @@ def append(path, date, session, metrics):
 def table(history, date, metrics, tol=None):
     """Markdown table: metric | previous | now | delta | verdict. Verdict uses the metric direction."""
     tol = tol or {}
-    prev = {}
+    prev, nxt = {}, {}
     for row in history:
-        if row["date"] < date:
-            k = row["metric"]
-            if k not in prev or row["date"] > prev[k]["date"]:
-                prev[k] = row
-    lines = ["| Метрика | Было | Стало | Δ | Итог |", "|---|---|---|---|---|"]
+        k = row["metric"]
+        if row["date"] < date and (k not in prev or row["date"] > prev[k]["date"]):
+            prev[k] = row
+        if row["date"] > date and (k not in nxt or row["date"] < nxt[k]["date"]):
+            nxt[k] = row
+    # older video added after newer ones: compare it with the next session instead ("then -> later")
+    reverse = not prev and bool(nxt)
+    if reverse:
+        prev = nxt
+    head = "| Метрика | Позже | Эта сессия (раньше) | Δ (позже − раньше) | Итог к позже |" if reverse else "| Метрика | Было | Стало | Δ | Итог |"
+    lines = [head, "|---|---|---|---|---|"]
     for k, d in METRICS.items():
         v = metrics.get(k)
         if v is None:
@@ -42,7 +48,7 @@ def table(history, date, metrics, tol=None):
         p = prev.get(k)
         if p is None or int(p["version"]) != d["version"]:
             lines.append(f"| {d['ru']} | — | {v:.1f} | | первая точка |"); continue
-        pv = float(p["value"]); delta = v - pv
+        pv = float(p["value"]); delta = (pv - v) if reverse else (v - pv)
         t = tol.get(k, 3.0 if d["unit"] == "%" else 0.05 * max(abs(pv), 1e-6))
         if d["direction"] == "info" or abs(delta) <= t:
             verdict = "≈ так же" if abs(delta) <= t else "инфо"
